@@ -15,10 +15,15 @@ data class AmountDto(
     val amount: String,
 )
 
+/**
+ * Response of GET /sessions/{id}. Unlike the session-creation response,
+ * `accounts` here is a plain list of account uids (verified against
+ * production: {"status":"AUTHORIZED","accounts":["<uid>", ...]}).
+ */
 @Serializable
-data class SessionDto(
-    @SerialName("session_id") val sessionId: String? = null,
-    val accounts: List<SessionAccountDto> = emptyList(),
+data class GetSessionDto(
+    val status: String? = null,
+    val accounts: List<String> = emptyList(),
     val access: AccessDto? = null,
 )
 
@@ -28,9 +33,10 @@ data class AccessDto(
 )
 
 @Serializable
-data class SessionAccountDto(
-    val uid: String,
+data class AccountDetailsDto(
     @SerialName("account_id") val accountId: AccountIdDto? = null,
+    val name: String? = null,
+    val currency: String? = null,
 )
 
 @Serializable

@@ -47,23 +47,24 @@ class SyncRepository @Inject constructor(
             val session = api.getSession(sessionId)
 
             accountDao.upsertAll(
-                session.accounts.mapIndexed { index, account ->
+                session.accounts.mapIndexed { index, accountUid ->
+                    val details = api.getAccountDetails(accountUid)
                     AccountEntity(
-                        uid = account.uid,
-                        iban = account.accountId?.iban ?: account.uid,
+                        uid = accountUid,
+                        iban = details.accountId?.iban ?: accountUid,
                         displayOrder = index,
                     )
                 }
             )
 
             var fetchedTransactions = 0
-            for (account in session.accounts) {
-                val balances = api.getBalances(account.uid)
+            for (accountUid in session.accounts) {
+                val balances = api.getBalances(accountUid)
                 balances.balances.firstOrNull()?.let { balance ->
                     val money = Money.parse(balance.balanceAmount.amount, balance.balanceAmount.currency)
                     balanceSnapshotDao.insert(
                         BalanceSnapshotEntity(
-                            accountUid = account.uid,
+                            accountUid = accountUid,
                             capturedAtEpochMillis = System.currentTimeMillis(),
                             balanceCents = money.cents,
                             currency = money.currency,
@@ -71,7 +72,7 @@ class SyncRepository @Inject constructor(
                         )
                     )
                 }
-                fetchedTransactions += syncTransactionsForAccount(account.uid)
+                fetchedTransactions += syncTransactionsForAccount(accountUid)
             }
 
             syncLogDao.complete(logId, System.currentTimeMillis(), "success", null)

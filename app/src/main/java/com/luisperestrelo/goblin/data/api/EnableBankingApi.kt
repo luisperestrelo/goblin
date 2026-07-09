@@ -7,7 +7,10 @@ import retrofit2.http.Query
 interface EnableBankingApi {
 
     @GET("sessions/{sessionId}")
-    suspend fun getSession(@Path("sessionId") sessionId: String): SessionDto
+    suspend fun getSession(@Path("sessionId") sessionId: String): GetSessionDto
+
+    @GET("accounts/{accountUid}/details")
+    suspend fun getAccountDetails(@Path("accountUid") accountUid: String): AccountDetailsDto
 
     @GET("accounts/{accountUid}/balances")
     suspend fun getBalances(@Path("accountUid") accountUid: String): BalancesResponseDto
