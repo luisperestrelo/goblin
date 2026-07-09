@@ -4,8 +4,9 @@
 *.jks
 *.keystore
 
-# Gradle
+# Gradle / Kotlin build state
 .gradle/
+.kotlin/
 build/
 
 # Android / IDE
