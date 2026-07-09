@@ -1,0 +1,3 @@
+# Never commit private keys (Enable Banking application key or any other)
+*.pem
+*.key
