@@ -1,3 +1,17 @@
 # Never commit private keys (Enable Banking application key or any other)
 *.pem
 *.key
+*.jks
+*.keystore
+
+# Gradle
+.gradle/
+build/
+
+# Android / IDE
+local.properties
+.idea/
+captures/
+*.apk
+*.aab
+output-metadata.json
