@@ -177,10 +177,11 @@ def fetch_all_transactions(headers: dict, account_uid: str) -> list:
     page_number = 0
     while True:
         page_number += 1
+        # Abanca's connector requires the original query params to be repeated
+        # on every page together with the continuation key.
+        url = f"{API_ORIGIN}/accounts/{account_uid}/transactions?date_from={date_from}"
         if continuation_key:
-            url = f"{API_ORIGIN}/accounts/{account_uid}/transactions?continuation_key={continuation_key}"
-        else:
-            url = f"{API_ORIGIN}/accounts/{account_uid}/transactions?date_from={date_from}"
+            url += f"&continuation_key={continuation_key}"
         response = request_or_die("GET", url, headers)
         payload = response.json()
         transactions.extend(payload["transactions"])
