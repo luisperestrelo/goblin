@@ -49,6 +49,8 @@ fun DebugScreen(modifier: Modifier = Modifier, viewModel: DebugViewModel = hiltV
     val authPhase by viewModel.authPhase.collectAsState()
     val consentValidUntil by viewModel.consentValidUntil.collectAsState()
     val authUrlToOpen by viewModel.authUrlToOpen.collectAsState()
+    val accounts by viewModel.accounts.collectAsState()
+    val primaryIban by viewModel.primaryIban.collectAsState()
 
     val context = LocalContext.current
     var applicationIdInput by remember { mutableStateOf("") }
@@ -182,6 +184,41 @@ fun DebugScreen(modifier: Modifier = Modifier, viewModel: DebugViewModel = hiltV
                                 Money(snapshot.balanceCents, snapshot.currency).formatted(),
                                 fontWeight = FontWeight.Bold,
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Primary account (widget)", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "The widget shows only this account. Unset falls back to the most active one.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (accounts.isEmpty()) {
+                        Text("No accounts yet - sync first", style = MaterialTheme.typography.bodySmall)
+                    }
+                    accounts.forEach { account ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("...${account.iban.takeLast(4)}")
+                            if (account.iban == primaryIban) {
+                                Text(
+                                    "Primary",
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            } else {
+                                OutlinedButton(onClick = { viewModel.setPrimaryAccount(account.iban) }) {
+                                    Text("Set primary")
+                                }
+                            }
                         }
                     }
                 }

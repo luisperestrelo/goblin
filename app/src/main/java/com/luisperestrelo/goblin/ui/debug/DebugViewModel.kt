@@ -16,6 +16,7 @@ import com.luisperestrelo.goblin.data.db.SyncLogEntity
 import com.luisperestrelo.goblin.data.db.TransactionDao
 import com.luisperestrelo.goblin.data.db.TransactionEntity
 import com.luisperestrelo.goblin.data.repo.SyncRepository
+import com.luisperestrelo.goblin.widget.WidgetUpdater
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -38,7 +39,8 @@ class DebugViewModel @Inject constructor(
     private val credentialsStore: CredentialsStore,
     private val syncRepository: SyncRepository,
     private val authManager: AuthManager,
-    preferencesStore: PreferencesStore,
+    private val preferencesStore: PreferencesStore,
+    private val widgetUpdater: WidgetUpdater,
     accountDao: AccountDao,
     transactionDao: TransactionDao,
     balanceSnapshotDao: BalanceSnapshotDao,
@@ -53,6 +55,9 @@ class DebugViewModel @Inject constructor(
 
     val consentValidUntil: StateFlow<String?> =
         preferencesStore.consentValidUntil.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val primaryIban: StateFlow<String?> =
+        preferencesStore.primaryIban.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** One-shot SCA URL to open in a Custom Tab; cleared once launched. */
     private val _authUrlToOpen = MutableStateFlow<String?>(null)
@@ -142,11 +147,20 @@ class DebugViewModel @Inject constructor(
         viewModelScope.launch { authManager.completeAuthorization(code.trim(), returnedState = null) }
     }
 
+    /** Pin which account the widget/app focuses on, then refresh the widget. */
+    fun setPrimaryAccount(iban: String) {
+        viewModelScope.launch {
+            preferencesStore.setPrimaryIban(iban)
+            widgetUpdater.update()
+        }
+    }
+
     fun syncNow() {
         _setupState.value = _setupState.value.copy(syncing = true, statusMessage = "Syncing...")
         viewModelScope.launch {
             try {
                 val summary = syncRepository.syncNow()
+                widgetUpdater.update()
                 _setupState.value = _setupState.value.copy(
                     syncing = false,
                     statusMessage = "Synced ${summary.accountCount} accounts, ${summary.fetchedTransactionCount} transactions fetched",

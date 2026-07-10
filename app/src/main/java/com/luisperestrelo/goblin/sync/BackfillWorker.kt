@@ -11,6 +11,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.luisperestrelo.goblin.data.repo.SyncRepository
+import com.luisperestrelo.goblin.widget.WidgetUpdater
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
@@ -32,10 +33,12 @@ class BackfillWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val syncRepository: SyncRepository,
+    private val widgetUpdater: WidgetUpdater,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = try {
         syncRepository.syncNow(forceFullHistory = true)
+        widgetUpdater.update()
         Result.success()
     } catch (e: Exception) {
         // Transient bank errors (429/5xx) are common; back off and retry while

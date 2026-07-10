@@ -29,6 +29,24 @@ interface TransactionDao {
 
     @Query("SELECT COUNT(*) FROM transactions")
     fun observeCount(): Flow<Int>
+
+    /**
+     * Sum of amounts (cents) for one account and direction over the half-open
+     * booking-date window [fromInclusive, toExclusive). bookingDate is stored as
+     * ISO `YYYY-MM-DD`, so lexicographic comparison is chronological.
+     */
+    @Query(
+        """
+        SELECT COALESCE(SUM(amountCents), 0) FROM transactions
+        WHERE accountIban = :iban AND creditDebitIndicator = :direction
+          AND bookingDate >= :fromInclusive AND bookingDate < :toExclusive
+        """
+    )
+    suspend fun sumAmount(iban: String, direction: String, fromInclusive: String, toExclusive: String): Long
+
+    /** IBAN of the account with the most transactions; the primary-account fallback. */
+    @Query("SELECT accountIban FROM transactions GROUP BY accountIban ORDER BY COUNT(*) DESC LIMIT 1")
+    suspend fun mostActiveIban(): String?
 }
 
 @Dao
@@ -45,6 +63,9 @@ interface BalanceSnapshotDao {
         """
     )
     fun observeLatestPerAccount(): Flow<List<BalanceSnapshotEntity>>
+
+    @Query("SELECT * FROM balance_snapshots WHERE accountIban = :iban ORDER BY id DESC LIMIT 1")
+    suspend fun latestForAccount(iban: String): BalanceSnapshotEntity?
 }
 
 @Dao
@@ -57,4 +78,7 @@ interface SyncLogDao {
 
     @Query("SELECT * FROM sync_log ORDER BY id DESC LIMIT 1")
     fun observeLast(): Flow<SyncLogEntity?>
+
+    @Query("SELECT MAX(finishedAtEpochMillis) FROM sync_log WHERE outcome = 'success'")
+    suspend fun lastSuccessfulSyncEpochMillis(): Long?
 }
