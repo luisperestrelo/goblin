@@ -31,18 +31,13 @@ interface TransactionDao {
     fun observeCount(): Flow<Int>
 
     /**
-     * Sum of amounts (cents) for one account and direction over the half-open
-     * booking-date window [fromInclusive, toExclusive). bookingDate is stored as
-     * ISO `YYYY-MM-DD`, so lexicographic comparison is chronological.
+     * All transactions (every account) booked in the half-open window
+     * [fromInclusive, toExclusive). bookingDate is stored as ISO `YYYY-MM-DD`, so
+     * lexicographic comparison is chronological. Both accounts are needed together
+     * so internal transfers between them can be matched and excluded.
      */
-    @Query(
-        """
-        SELECT COALESCE(SUM(amountCents), 0) FROM transactions
-        WHERE accountIban = :iban AND creditDebitIndicator = :direction
-          AND bookingDate >= :fromInclusive AND bookingDate < :toExclusive
-        """
-    )
-    suspend fun sumAmount(iban: String, direction: String, fromInclusive: String, toExclusive: String): Long
+    @Query("SELECT * FROM transactions WHERE bookingDate >= :fromInclusive AND bookingDate < :toExclusive")
+    suspend fun inWindow(fromInclusive: String, toExclusive: String): List<TransactionEntity>
 
     /** IBAN of the account with the most transactions; the primary-account fallback. */
     @Query("SELECT accountIban FROM transactions GROUP BY accountIban ORDER BY COUNT(*) DESC LIMIT 1")

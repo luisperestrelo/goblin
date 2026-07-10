@@ -6,6 +6,10 @@ import com.luisperestrelo.goblin.data.db.SyncLogDao
 import com.luisperestrelo.goblin.data.db.TransactionDao
 import com.luisperestrelo.goblin.data.db.TransactionEntity
 import com.luisperestrelo.goblin.data.prefs.PreferencesStore
+import com.luisperestrelo.goblin.domain.DateWindow
+import com.luisperestrelo.goblin.domain.InternalTransferDetector
+import com.luisperestrelo.goblin.domain.LegKey
+import com.luisperestrelo.goblin.domain.TransferLeg
 import com.luisperestrelo.goblin.domain.WeekComparisonWindows
 import com.luisperestrelo.goblin.domain.model.Money
 import com.luisperestrelo.goblin.widget.WidgetData
@@ -43,15 +47,9 @@ class WidgetRepository @Inject constructor(
         val currency = balance?.currency ?: DEFAULT_CURRENCY
 
         val windows = WeekComparisonWindows.forToday(now)
-        val spentThisWeek = transactionDao.sumAmount(
-            iban, DEBIT, windows.thisWeek.fromInclusive.toString(), windows.thisWeek.toExclusive.toString()
-        )
-        val spentLastWeek = transactionDao.sumAmount(
-            iban, DEBIT, windows.lastWeekAligned.fromInclusive.toString(), windows.lastWeekAligned.toExclusive.toString()
-        )
-        val receivedThisWeek = transactionDao.sumAmount(
-            iban, CREDIT, windows.thisWeek.fromInclusive.toString(), windows.thisWeek.toExclusive.toString()
-        )
+        val spentThisWeek = sumExcludingInternal(iban, DEBIT, windows.thisWeek)
+        val spentLastWeek = sumExcludingInternal(iban, DEBIT, windows.lastWeekAligned)
+        val receivedThisWeek = sumExcludingInternal(iban, CREDIT, windows.thisWeek)
 
         val lastSync = syncLogDao.lastSuccessfulSyncEpochMillis()
         val isStale = lastSync == null || (System.currentTimeMillis() - lastSync) > STALE_THRESHOLD_MILLIS
@@ -71,6 +69,36 @@ class WidgetRepository @Inject constructor(
             recent = recent,
         )
     }
+
+    /**
+     * Sum for one account+direction over [window], excluding legs that are really
+     * transfers between the user's own accounts. The window is padded by a few days
+     * on each side so a transfer whose two legs straddle the boundary is still
+     * paired, then the sum is filtered back to the exact window.
+     */
+    private suspend fun sumExcludingInternal(iban: String, direction: String, window: DateWindow): Long {
+        val rows = transactionDao.inWindow(
+            window.fromInclusive.minusDays(TRANSFER_PAD_DAYS).toString(),
+            window.toExclusive.plusDays(TRANSFER_PAD_DAYS).toString(),
+        )
+        val internal = InternalTransferDetector.detect(rows.map { it.toTransferLeg() })
+        val from = window.fromInclusive.toString()
+        val to = window.toExclusive.toString()
+        return rows.asSequence()
+            .filter { it.accountIban == iban && it.creditDebitIndicator == direction }
+            .filter { it.bookingDate >= from && it.bookingDate < to }
+            .filter { LegKey(it.accountIban, it.entryReference) !in internal }
+            .sumOf { it.amountCents }
+    }
+
+    private fun TransactionEntity.toTransferLeg() = TransferLeg(
+        iban = accountIban,
+        entryReference = entryReference,
+        isDebit = creditDebitIndicator == DEBIT,
+        amountCents = amountCents,
+        currency = currency,
+        bookingDate = LocalDate.parse(bookingDate),
+    )
 
     private fun TransactionEntity.toWidgetTransaction(): WidgetTransaction {
         val signedCents = if (creditDebitIndicator == DEBIT) -amountCents else amountCents
@@ -96,5 +124,6 @@ class WidgetRepository @Inject constructor(
         const val DEFAULT_CURRENCY = "EUR"
         const val STALE_THRESHOLD_MILLIS = 24L * 60 * 60 * 1000
         const val RECENT_LIMIT = 4
+        const val TRANSFER_PAD_DAYS = 3L
     }
 }
