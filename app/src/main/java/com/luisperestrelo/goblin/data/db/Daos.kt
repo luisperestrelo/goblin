@@ -47,6 +47,9 @@ interface TransactionDao {
     /** IBAN of the account with the most transactions; the primary-account fallback. */
     @Query("SELECT accountIban FROM transactions GROUP BY accountIban ORDER BY COUNT(*) DESC LIMIT 1")
     suspend fun mostActiveIban(): String?
+
+    @Query("SELECT * FROM transactions WHERE accountIban = :iban ORDER BY bookingDate DESC, entryReference DESC LIMIT :limit")
+    suspend fun recentForAccount(iban: String, limit: Int): List<TransactionEntity>
 }
 
 @Dao

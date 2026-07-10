@@ -4,11 +4,13 @@ import com.luisperestrelo.goblin.data.credentials.CredentialsStore
 import com.luisperestrelo.goblin.data.db.BalanceSnapshotDao
 import com.luisperestrelo.goblin.data.db.SyncLogDao
 import com.luisperestrelo.goblin.data.db.TransactionDao
+import com.luisperestrelo.goblin.data.db.TransactionEntity
 import com.luisperestrelo.goblin.data.prefs.PreferencesStore
 import com.luisperestrelo.goblin.domain.WeekComparisonWindows
 import com.luisperestrelo.goblin.domain.model.Money
 import com.luisperestrelo.goblin.widget.WidgetData
 import com.luisperestrelo.goblin.widget.WidgetStatus
+import com.luisperestrelo.goblin.widget.WidgetTransaction
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -55,6 +57,7 @@ class WidgetRepository @Inject constructor(
         val isStale = lastSync == null || (System.currentTimeMillis() - lastSync) > STALE_THRESHOLD_MILLIS
 
         val consentExpired = consentExpired()
+        val recent = transactionDao.recentForAccount(iban, RECENT_LIMIT).map { it.toWidgetTransaction() }
 
         return WidgetData(
             status = if (consentExpired) WidgetStatus.NEEDS_REAUTH else WidgetStatus.READY,
@@ -65,6 +68,16 @@ class WidgetRepository @Inject constructor(
             receivedThisWeek = Money(receivedThisWeek, currency),
             lastSyncEpochMillis = lastSync,
             isStale = isStale,
+            recent = recent,
+        )
+    }
+
+    private fun TransactionEntity.toWidgetTransaction(): WidgetTransaction {
+        val signedCents = if (creditDebitIndicator == DEBIT) -amountCents else amountCents
+        return WidgetTransaction(
+            description = remittanceLines.firstOrNull()?.takeIf { it.isNotBlank() } ?: "(no description)",
+            amount = Money(signedCents, currency),
+            bookingDate = bookingDate,
         )
     }
 
@@ -82,5 +95,6 @@ class WidgetRepository @Inject constructor(
         const val CREDIT = "CRDT"
         const val DEFAULT_CURRENCY = "EUR"
         const val STALE_THRESHOLD_MILLIS = 24L * 60 * 60 * 1000
+        const val RECENT_LIMIT = 4
     }
 }

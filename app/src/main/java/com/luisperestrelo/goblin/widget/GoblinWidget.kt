@@ -24,8 +24,10 @@ import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
@@ -50,7 +52,7 @@ interface WidgetEntryPoint {
 
 class GoblinWidget : GlanceAppWidget() {
 
-    override val sizeMode = SizeMode.Responsive(setOf(SMALL, MEDIUM))
+    override val sizeMode = SizeMode.Responsive(setOf(SMALL, MEDIUM, LARGE))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repository = EntryPointAccessors
@@ -68,6 +70,7 @@ class GoblinWidget : GlanceAppWidget() {
     private companion object {
         val SMALL = DpSize(140.dp, 100.dp)
         val MEDIUM = DpSize(250.dp, 100.dp)
+        val LARGE = DpSize(250.dp, 200.dp)
     }
 }
 
@@ -87,8 +90,12 @@ private fun WidgetShell(data: WidgetData) {
             WidgetStatus.SETUP_REQUIRED -> MessageContent("goblin", "Open to set up")
             WidgetStatus.NEEDS_REAUTH -> MessageContent("Re-authorize", "Consent expired - tap to renew")
             WidgetStatus.READY -> {
-                val wide = LocalSize.current.width >= MEDIUM_BREAKPOINT
-                if (wide) MediumContent(data) else SmallContent(data)
+                val size = LocalSize.current
+                when {
+                    size.height >= LARGE_HEIGHT && size.width >= MEDIUM_BREAKPOINT -> LargeContent(data)
+                    size.width >= MEDIUM_BREAKPOINT -> MediumContent(data)
+                    else -> SmallContent(data)
+                }
             }
         }
     }
@@ -128,6 +135,55 @@ private fun MediumContent(data: WidgetData) {
         DeltaLine(data)
         Spacer(GlanceModifier.defaultWeight())
         Label(freshness(data))
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun LargeContent(data: WidgetData) {
+    Column(modifier = GlanceModifier.fillMaxSize()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                data.balance.headline(),
+                style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 26.sp, fontWeight = FontWeight.Bold),
+            )
+            Spacer(GlanceModifier.defaultWeight())
+            Label("...${data.accountLast4}")
+        }
+        Spacer(GlanceModifier.height(4.dp))
+        Text(
+            "Spent ${data.spentThisWeek.orZero()}   Received ${data.receivedThisWeek.orZero()}",
+            style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp),
+        )
+        Spacer(GlanceModifier.height(2.dp))
+        DeltaLine(data)
+        Spacer(GlanceModifier.height(10.dp))
+        data.recent.forEach { TransactionRow(it) }
+        Spacer(GlanceModifier.defaultWeight())
+        Label(freshness(data))
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun TransactionRow(txn: WidgetTransaction) {
+    Row(
+        modifier = GlanceModifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            txn.description,
+            maxLines = 1,
+            style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 12.sp),
+            modifier = GlanceModifier.defaultWeight(),
+        )
+        Spacer(GlanceModifier.width(8.dp))
+        Text(
+            txn.amount.formatted(),
+            style = TextStyle(
+                color = if (txn.amount.cents < 0) GlanceTheme.colors.onSurfaceVariant else ColorProvider(SPENT_LESS),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+        )
     }
 }
 
@@ -178,5 +234,6 @@ private fun freshness(data: WidgetData): String {
 
 private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val MEDIUM_BREAKPOINT = 200.dp
+private val LARGE_HEIGHT = 160.dp
 private val SPENT_MORE = Color(0xFFE57373)
 private val SPENT_LESS = Color(0xFF66BB6A)
