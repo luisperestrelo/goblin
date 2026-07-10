@@ -1,7 +1,9 @@
 package com.luisperestrelo.goblin.ui.debug
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +20,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.luisperestrelo.goblin.auth.AuthPhase
 import com.luisperestrelo.goblin.data.db.TransactionEntity
 import com.luisperestrelo.goblin.domain.model.Money
 
@@ -43,10 +47,20 @@ fun DebugScreen(modifier: Modifier = Modifier, viewModel: DebugViewModel = hiltV
     val balances by viewModel.latestBalances.collectAsState()
     val recentTransactions by viewModel.recentTransactions.collectAsState()
     val transactionCount by viewModel.transactionCount.collectAsState()
+    val authPhase by viewModel.authPhase.collectAsState()
+    val consentValidUntil by viewModel.consentValidUntil.collectAsState()
+    val authUrlToOpen by viewModel.authUrlToOpen.collectAsState()
 
     val context = LocalContext.current
     var applicationIdInput by remember { mutableStateOf("") }
     var sessionIdInput by remember { mutableStateOf("") }
+
+    LaunchedEffect(authUrlToOpen) {
+        authUrlToOpen?.let { url ->
+            CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(url))
+            viewModel.onAuthUrlConsumed()
+        }
+    }
 
     val pemPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -90,6 +104,28 @@ fun DebugScreen(modifier: Modifier = Modifier, viewModel: DebugViewModel = hiltV
                         Button(onClick = { viewModel.saveCredentials(applicationIdInput, sessionIdInput) }) {
                             Text("Save")
                         }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Authorize", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Runs the real bank auth flow on device - no PC session needed.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Button(
+                        onClick = viewModel::authorize,
+                        enabled = setupState.credentialsConfigured && !authPhase.isInProgress(),
+                    ) {
+                        Text("Authorize with ABANCA")
+                    }
+                    Text(authPhase.describe(), style = MaterialTheme.typography.bodySmall)
+                    consentValidUntil?.let {
+                        Text("Consent valid until $it", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -168,4 +204,18 @@ private fun TransactionRow(transaction: TransactionEntity) {
             color = if (signedCents < 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
         )
     }
+}
+
+private fun AuthPhase.isInProgress(): Boolean = when (this) {
+    AuthPhase.RequestingAuthUrl, AuthPhase.AwaitingBankAuthorization, AuthPhase.ExchangingCode -> true
+    AuthPhase.Idle, AuthPhase.Authorized, is AuthPhase.Error -> false
+}
+
+private fun AuthPhase.describe(): String = when (this) {
+    AuthPhase.Idle -> "Not authorized on this device yet"
+    AuthPhase.RequestingAuthUrl -> "Requesting authorization URL..."
+    AuthPhase.AwaitingBankAuthorization -> "Waiting for bank authorization in the browser..."
+    AuthPhase.ExchangingCode -> "Exchanging code for a session..."
+    AuthPhase.Authorized -> "Authorized - backfilling 3 years of history"
+    is AuthPhase.Error -> "Error: $message"
 }

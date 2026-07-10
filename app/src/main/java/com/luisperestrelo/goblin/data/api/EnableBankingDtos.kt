@@ -16,6 +16,59 @@ data class AmountDto(
 )
 
 /**
+ * Body of POST /auth. Starts bank authorization; the response carries the URL
+ * to open in a Custom Tab for SCA. Mirrors the verified explorer request.
+ */
+@Serializable
+data class AuthRequestDto(
+    val access: AuthAccessDto,
+    val aspsp: AspspDto,
+    val state: String,
+    @SerialName("redirect_url") val redirectUrl: String,
+    @SerialName("psu_type") val psuType: String,
+)
+
+@Serializable
+data class AuthAccessDto(
+    @SerialName("valid_until") val validUntil: String,
+)
+
+@Serializable
+data class AspspDto(
+    val name: String,
+    val country: String,
+)
+
+@Serializable
+data class AuthResponseDto(
+    val url: String,
+)
+
+/** Body of POST /sessions: exchanges the redirect `code` for a session. */
+@Serializable
+data class CreateSessionRequestDto(
+    val code: String,
+)
+
+/**
+ * Response of POST /sessions. Unlike GET /sessions/{id}, `accounts` here is a
+ * list of full objects (uid + account_id), and `access.valid_until` reflects
+ * the consent window the bank actually granted.
+ */
+@Serializable
+data class CreateSessionResponseDto(
+    @SerialName("session_id") val sessionId: String,
+    val accounts: List<SessionAccountDto> = emptyList(),
+    val access: AccessDto? = null,
+)
+
+@Serializable
+data class SessionAccountDto(
+    val uid: String,
+    @SerialName("account_id") val accountId: AccountIdDto? = null,
+)
+
+/**
  * Response of GET /sessions/{id}. Unlike the session-creation response,
  * `accounts` here is a plain list of account uids (verified against
  * production: {"status":"AUTHORIZED","accounts":["<uid>", ...]}).

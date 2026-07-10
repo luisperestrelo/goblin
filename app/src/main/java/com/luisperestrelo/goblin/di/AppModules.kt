@@ -2,6 +2,7 @@ package com.luisperestrelo.goblin.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.work.WorkManager
 import com.luisperestrelo.goblin.data.api.AuthorizationInterceptor
 import com.luisperestrelo.goblin.data.api.EnableBankingApi
 import com.luisperestrelo.goblin.data.credentials.CredentialsStore
@@ -56,6 +57,16 @@ object NetworkModule {
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
             .create(EnableBankingApi::class.java)
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+object WorkModule {
+
+    @Provides
+    @Singleton
+    fun provideWorkManager(@ApplicationContext context: Context): WorkManager =
+        WorkManager.getInstance(context)
 }
 
 @Module

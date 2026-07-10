@@ -4,6 +4,9 @@
 *.jks
 *.keystore
 
+# Signing config: points at the release keystore and holds its password
+keystore.properties
+
 # Gradle / Kotlin build state
 .gradle/
 .kotlin/

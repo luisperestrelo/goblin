@@ -36,8 +36,12 @@ class SyncRepository @Inject constructor(
      * store a balance snapshot and upsert transactions. Incremental windows
      * overlap the newest known booking date by a few days so late-booked
      * transactions are never missed; upserts keep the overlap idempotent.
+     *
+     * [forceFullHistory] ignores local state and pulls the full backfill window
+     * per account - used by the post-auth backfill, which must seed the deepest
+     * history while the bank's ~1h post-SCA deep-history window is still open.
      */
-    suspend fun syncNow(): SyncSummary {
+    suspend fun syncNow(forceFullHistory: Boolean = false): SyncSummary {
         val logId = syncLogDao.insert(
             SyncLogEntity(startedAtEpochMillis = System.currentTimeMillis(), finishedAtEpochMillis = null, outcome = "running", detail = null)
         )
@@ -72,7 +76,7 @@ class SyncRepository @Inject constructor(
                         )
                     )
                 }
-                fetchedTransactions += syncTransactionsForAccount(accountUid)
+                fetchedTransactions += syncTransactionsForAccount(accountUid, forceFullHistory)
             }
 
             syncLogDao.complete(logId, System.currentTimeMillis(), "success", null)
@@ -83,8 +87,8 @@ class SyncRepository @Inject constructor(
         }
     }
 
-    private suspend fun syncTransactionsForAccount(accountUid: String): Int {
-        val newestKnown = transactionDao.newestBookingDate(accountUid)
+    private suspend fun syncTransactionsForAccount(accountUid: String, forceFullHistory: Boolean): Int {
+        val newestKnown = if (forceFullHistory) null else transactionDao.newestBookingDate(accountUid)
         val dateFrom = if (newestKnown != null) {
             LocalDate.parse(newestKnown).minusDays(INCREMENTAL_OVERLAP_DAYS).toString()
         } else {

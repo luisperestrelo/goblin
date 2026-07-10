@@ -1,10 +1,20 @@
 package com.luisperestrelo.goblin.data.api
 
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface EnableBankingApi {
+
+    /** Starts bank authorization; response `url` is opened for SCA. */
+    @POST("auth")
+    suspend fun startAuthorization(@Body request: AuthRequestDto): AuthResponseDto
+
+    /** Exchanges the redirect `code` for an authorized session. */
+    @POST("sessions")
+    suspend fun createSession(@Body request: CreateSessionRequestDto): CreateSessionResponseDto
 
     @GET("sessions/{sessionId}")
     suspend fun getSession(@Path("sessionId") sessionId: String): GetSessionDto

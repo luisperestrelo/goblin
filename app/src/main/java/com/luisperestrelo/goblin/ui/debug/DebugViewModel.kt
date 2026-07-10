@@ -2,8 +2,11 @@ package com.luisperestrelo.goblin.ui.debug
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.luisperestrelo.goblin.auth.AuthManager
+import com.luisperestrelo.goblin.auth.AuthPhase
 import com.luisperestrelo.goblin.data.credentials.Credentials
 import com.luisperestrelo.goblin.data.credentials.CredentialsStore
+import com.luisperestrelo.goblin.data.prefs.PreferencesStore
 import com.luisperestrelo.goblin.data.db.AccountDao
 import com.luisperestrelo.goblin.data.db.AccountEntity
 import com.luisperestrelo.goblin.data.db.BalanceSnapshotDao
@@ -34,6 +37,8 @@ data class DebugSetupState(
 class DebugViewModel @Inject constructor(
     private val credentialsStore: CredentialsStore,
     private val syncRepository: SyncRepository,
+    private val authManager: AuthManager,
+    preferencesStore: PreferencesStore,
     accountDao: AccountDao,
     transactionDao: TransactionDao,
     balanceSnapshotDao: BalanceSnapshotDao,
@@ -42,6 +47,16 @@ class DebugViewModel @Inject constructor(
 
     private val _setupState = MutableStateFlow(initialSetupState())
     val setupState: StateFlow<DebugSetupState> = _setupState.asStateFlow()
+
+    /** Live authorization phase (shared with the App Link redirect handler). */
+    val authPhase: StateFlow<AuthPhase> = authManager.phase
+
+    val consentValidUntil: StateFlow<String?> =
+        preferencesStore.consentValidUntil.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** One-shot SCA URL to open in a Custom Tab; cleared once launched. */
+    private val _authUrlToOpen = MutableStateFlow<String?>(null)
+    val authUrlToOpen: StateFlow<String?> = _authUrlToOpen.asStateFlow()
 
     val accounts: StateFlow<List<AccountEntity>> =
         accountDao.observeAll().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -104,6 +119,17 @@ class DebugViewModel @Inject constructor(
             hasSessionId = sessionId.isNotBlank(),
             statusMessage = "Credentials saved",
         )
+    }
+
+    /** Requests the SCA URL and exposes it for the screen to open in a Custom Tab. */
+    fun authorize() {
+        viewModelScope.launch {
+            _authUrlToOpen.value = authManager.beginAuthorization()
+        }
+    }
+
+    fun onAuthUrlConsumed() {
+        _authUrlToOpen.value = null
     }
 
     fun syncNow() {
