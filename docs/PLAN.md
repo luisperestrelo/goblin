@@ -102,14 +102,15 @@ Ranked; all computable offline from local data:
 
 Room database, entities (keys chosen from verified API behavior):
 
-- `Account(uid PK, iban, nickname, displayOrder)`
-- `BankTransaction(accountUid, entryReference, amountCents, currency,
+- `Account(iban PK, nickname, displayOrder)` - keyed by IBAN, not the EB
+  account uid (the uid changes on every authorization; see section 5).
+- `BankTransaction(accountIban, entryReference, amountCents, currency,
   creditDebitIndicator, status, bookingDate, valueDate,
   balanceAfterTransactionCents, remittanceLines, categoryId?,
-  internalTransferPairId?)` - PK composite `(accountUid, entryReference)`;
+  internalTransferPairId?)` - PK composite `(accountIban, entryReference)`;
   `transaction_id` from the API is always null for ABANCA, `entry_reference`
-  is the real identifier. Upserts make sync idempotent.
-- `BalanceSnapshot(accountUid, capturedAt, balanceCents, balanceType)` - one
+  is the real (stable) identifier. Upserts make sync idempotent across re-auths.
+- `BalanceSnapshot(accountIban, capturedAt, balanceCents, balanceType)` - one
   per account per sync; the widget reads the latest, curves interpolate
   between transaction-level running balances and snapshots.
 - `CategoryRule(id, pattern, matchType, categoryId, priority)` and
@@ -185,6 +186,11 @@ Everything the Kotlin client must honor, learned via the explorer:
 - Redirect URLs must be https (no custom schemes, no http).
 - Two accounts (..7715 main, ..1886 secondary). Restricted app returns only
   whitelisted accounts.
+- Account `uid` is NOT stable: Enable Banking mints a new account uid on every
+  authorization for the same IBAN (verified in phase-2 device testing,
+  2026-07-10 - a re-auth duplicated the whole history under new uids). Key all
+  local storage by IBAN; treat uid as a throwaway per-session API handle only.
+  `entry_reference` by contrast is stable (deterministic timestamp+amount).
 - GET /accounts/{uid}/balances -> balance_type `ITAV` (interim available).
 - GET /accounts/{uid}/transactions?date_from=YYYY-MM-DD, 50/page,
   `continuation_key` for next page, **date_from must be repeated on every
@@ -255,8 +261,8 @@ WorkManager glue are verified on-device per phase, not unit-tested.
 Payments of any kind (impossible under AIS scope - by design), budgets with
 manual data entry, multi-user, cloud sync/backup, iOS, Wear OS, ML
 categorization. Multi-bank support is out of scope but the schema keys by
-account uid everywhere, so a second EB-supported bank later is additive, not
-a migration.
+IBAN everywhere (globally unique across banks), so a second EB-supported bank
+later is additive, not a migration.
 
 ## 10. Later / maybe
 
