@@ -3,7 +3,7 @@ package com.luisperestrelo.goblin.widget
 import android.content.Context
 import android.content.Intent
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -52,7 +52,9 @@ interface WidgetEntryPoint {
 
 class GoblinWidget : GlanceAppWidget() {
 
-    override val sizeMode = SizeMode.Responsive(setOf(SMALL, MEDIUM, LARGE))
+    // Exact reports the real widget size (Responsive mis-bucketed tall widgets,
+    // laying content out for a smaller declared size and clipping the rest).
+    override val sizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repository = EntryPointAccessors
@@ -65,12 +67,6 @@ class GoblinWidget : GlanceAppWidget() {
                 WidgetShell(data)
             }
         }
-    }
-
-    private companion object {
-        val SMALL = DpSize(140.dp, 100.dp)
-        val MEDIUM = DpSize(250.dp, 100.dp)
-        val LARGE = DpSize(250.dp, 200.dp)
     }
 }
 
@@ -92,9 +88,9 @@ private fun WidgetShell(data: WidgetData) {
             WidgetStatus.READY -> {
                 val size = LocalSize.current
                 when {
-                    size.height >= LARGE_HEIGHT && size.width >= MEDIUM_BREAKPOINT -> LargeContent(data)
-                    size.width >= MEDIUM_BREAKPOINT -> MediumContent(data)
-                    else -> SmallContent(data)
+                    size.width < MEDIUM_BREAKPOINT -> SmallContent(data)
+                    size.height < LARGE_HEIGHT -> MediumContent(data)
+                    else -> LargeContent(data, rowsForHeight(size.height))
                 }
             }
         }
@@ -143,7 +139,7 @@ private fun MediumContent(data: WidgetData) {
 }
 
 @androidx.compose.runtime.Composable
-private fun LargeContent(data: WidgetData) {
+private fun LargeContent(data: WidgetData, maxRows: Int) {
     Column(modifier = GlanceModifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -165,8 +161,8 @@ private fun LargeContent(data: WidgetData) {
             PaceLine(it)
         }
         Spacer(GlanceModifier.height(10.dp))
-        data.recent.forEach { TransactionRow(it) }
-        Spacer(GlanceModifier.defaultWeight())
+        data.recent.take(maxRows).forEach { TransactionRow(it) }
+        Spacer(GlanceModifier.height(6.dp))
         Label(freshness(data))
     }
 }
@@ -250,6 +246,13 @@ private fun freshness(data: WidgetData): String {
 
 private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val MEDIUM_BREAKPOINT = 200.dp
-private val LARGE_HEIGHT = 160.dp
+private val LARGE_HEIGHT = 140.dp
+private val LARGE_HEADER = 105.dp
+private val ROW_HEIGHT = 20.dp
+private const val MAX_ROWS = 8
 private val SPENT_MORE = Color(0xFFE57373)
 private val SPENT_LESS = Color(0xFF66BB6A)
+
+/** How many transaction rows fit under the header at the widget's actual height. */
+private fun rowsForHeight(height: Dp): Int =
+    ((height - LARGE_HEADER).value / ROW_HEIGHT.value).toInt().coerceIn(1, MAX_ROWS)

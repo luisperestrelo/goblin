@@ -150,7 +150,7 @@ class WidgetRepository @Inject constructor(
         const val CREDIT = "CRDT"
         const val DEFAULT_CURRENCY = "EUR"
         const val STALE_THRESHOLD_MILLIS = 24L * 60 * 60 * 1000
-        const val RECENT_LIMIT = 4
+        const val RECENT_LIMIT = 8
         const val TRANSFER_PAD_DAYS = 3L
         const val WEEKLY_HISTORY_WEEKS = 26
     }
