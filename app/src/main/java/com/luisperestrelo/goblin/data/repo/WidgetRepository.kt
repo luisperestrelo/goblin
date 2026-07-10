@@ -9,9 +9,12 @@ import com.luisperestrelo.goblin.data.prefs.PreferencesStore
 import com.luisperestrelo.goblin.domain.DateWindow
 import com.luisperestrelo.goblin.domain.InternalTransferDetector
 import com.luisperestrelo.goblin.domain.LegKey
+import com.luisperestrelo.goblin.domain.SavingStreak
 import com.luisperestrelo.goblin.domain.TransferLeg
 import com.luisperestrelo.goblin.domain.WeekComparisonWindows
+import com.luisperestrelo.goblin.domain.WeeklySpend
 import com.luisperestrelo.goblin.domain.model.Money
+import com.luisperestrelo.goblin.widget.SavingGame
 import com.luisperestrelo.goblin.widget.WidgetData
 import com.luisperestrelo.goblin.widget.WidgetStatus
 import com.luisperestrelo.goblin.widget.WidgetTransaction
@@ -47,26 +50,50 @@ class WidgetRepository @Inject constructor(
         val currency = balance?.currency ?: DEFAULT_CURRENCY
 
         val windows = WeekComparisonWindows.forToday(now)
-        val spentThisWeek = sumExcludingInternal(iban, DEBIT, windows.thisWeek)
-        val spentLastWeek = sumExcludingInternal(iban, DEBIT, windows.lastWeekAligned)
-        val receivedThisWeek = sumExcludingInternal(iban, CREDIT, windows.thisWeek)
+        val spentThisWeek = Money(sumExcludingInternal(iban, DEBIT, windows.thisWeek), currency)
+        val receivedThisWeek = Money(sumExcludingInternal(iban, CREDIT, windows.thisWeek), currency)
 
         val lastSync = syncLogDao.lastSuccessfulSyncEpochMillis()
         val isStale = lastSync == null || (System.currentTimeMillis() - lastSync) > STALE_THRESHOLD_MILLIS
 
         val consentExpired = consentExpired()
         val recent = transactionDao.recentForAccount(iban, RECENT_LIMIT).map { it.toWidgetTransaction() }
+        val savingGame = computeSavingGame(iban, now, currency, spentThisWeek)
 
         return WidgetData(
             status = if (consentExpired) WidgetStatus.NEEDS_REAUTH else WidgetStatus.READY,
             accountLast4 = iban.takeLast(4),
             balance = balance,
-            spentThisWeek = Money(spentThisWeek, currency),
-            spentDeltaVsLastWeek = Money(spentThisWeek - spentLastWeek, currency),
-            receivedThisWeek = Money(receivedThisWeek, currency),
+            spentThisWeek = spentThisWeek,
+            receivedThisWeek = receivedThisWeek,
+            savingGame = savingGame,
             lastSyncEpochMillis = lastSync,
             isStale = isStale,
             recent = recent,
+        )
+    }
+
+    /**
+     * The weekly saving-streak game over the primary account's completed weeks
+     * (internal transfers excluded). Null until there's enough weekly history.
+     */
+    private suspend fun computeSavingGame(iban: String, now: LocalDate, currency: String, thisWeekSoFar: Money): SavingGame? {
+        val from = WeeklySpend.weekStartOf(now).minusWeeks(WEEKLY_HISTORY_WEEKS.toLong())
+        val to = WeeklySpend.weekStartOf(now) // exclusive: completed weeks only
+        val rows = transactionDao.inWindow(from.toString(), to.toString())
+        val internal = InternalTransferDetector.detect(rows.map { it.toTransferLeg() })
+        val debits = rows.asSequence()
+            .filter { it.accountIban == iban && it.creditDebitIndicator == DEBIT }
+            .filter { LegKey(it.accountIban, it.entryReference) !in internal }
+            .map { LocalDate.parse(it.bookingDate) to it.amountCents }
+            .toList()
+        val weekly = WeeklySpend.completedWeeklyTotals(debits, now, WEEKLY_HISTORY_WEEKS)
+        val streak = SavingStreak.compute(weekly) ?: return null
+        return SavingGame(
+            currentStreakWeeks = streak.currentStreakWeeks,
+            bestStreakWeeks = streak.bestStreakWeeks,
+            usualWeek = Money(streak.usualWeekCents, currency),
+            thisWeekSoFar = thisWeekSoFar,
         )
     }
 
@@ -125,5 +152,6 @@ class WidgetRepository @Inject constructor(
         const val STALE_THRESHOLD_MILLIS = 24L * 60 * 60 * 1000
         const val RECENT_LIMIT = 4
         const val TRANSFER_PAD_DAYS = 3L
+        const val WEEKLY_HISTORY_WEEKS = 26
     }
 }

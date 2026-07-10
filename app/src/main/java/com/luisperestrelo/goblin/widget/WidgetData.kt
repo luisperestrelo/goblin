@@ -13,6 +13,18 @@ data class WidgetTransaction(
     val bookingDate: String,
 )
 
+/** The weekly saving game: stay under your usual week to grow the streak. */
+data class SavingGame(
+    val currentStreakWeeks: Int,
+    val bestStreakWeeks: Int,
+    /** Your usual week's spend - the bar to stay under. */
+    val usualWeek: Money,
+    /** This week's spend so far (provisional - the last couple of days settle late). */
+    val thisWeekSoFar: Money,
+) {
+    val onTrack: Boolean get() = thisWeekSoFar.cents <= usualWeek.cents
+}
+
 /**
  * Everything the home-screen widget needs for one render, for the single primary
  * account. Assembled by [com.luisperestrelo.goblin.data.repo.WidgetRepository].
@@ -22,9 +34,9 @@ data class WidgetData(
     val accountLast4: String? = null,
     val balance: Money? = null,
     val spentThisWeek: Money? = null,
-    /** Signed: positive = spent more than the aligned window last week. */
-    val spentDeltaVsLastWeek: Money? = null,
     val receivedThisWeek: Money? = null,
+    /** The saving-streak game; null until there's enough weekly history. */
+    val savingGame: SavingGame? = null,
     val lastSyncEpochMillis: Long? = null,
     /** No successful sync in over a day - numbers may be behind the bank. */
     val isStale: Boolean = false,

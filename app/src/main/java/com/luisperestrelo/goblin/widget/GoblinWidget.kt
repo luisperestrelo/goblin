@@ -111,7 +111,7 @@ private fun SmallContent(data: WidgetData) {
             style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 24.sp, fontWeight = FontWeight.Bold),
         )
         Spacer(GlanceModifier.height(6.dp))
-        DeltaLine(data)
+        StreakLine(data.savingGame)
     }
 }
 
@@ -131,8 +131,12 @@ private fun MediumContent(data: WidgetData) {
             "Spent ${data.spentThisWeek.orZero()}   Received ${data.receivedThisWeek.orZero()}",
             style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp),
         )
-        Spacer(GlanceModifier.height(2.dp))
-        DeltaLine(data)
+        Spacer(GlanceModifier.height(4.dp))
+        StreakLine(data.savingGame)
+        data.savingGame?.let {
+            Spacer(GlanceModifier.height(2.dp))
+            PaceLine(it)
+        }
         Spacer(GlanceModifier.defaultWeight())
         Label(freshness(data))
     }
@@ -154,8 +158,12 @@ private fun LargeContent(data: WidgetData) {
             "Spent ${data.spentThisWeek.orZero()}   Received ${data.receivedThisWeek.orZero()}",
             style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp),
         )
-        Spacer(GlanceModifier.height(2.dp))
-        DeltaLine(data)
+        Spacer(GlanceModifier.height(4.dp))
+        StreakLine(data.savingGame)
+        data.savingGame?.let {
+            Spacer(GlanceModifier.height(2.dp))
+            PaceLine(it)
+        }
         Spacer(GlanceModifier.height(10.dp))
         data.recent.forEach { TransactionRow(it) }
         Spacer(GlanceModifier.defaultWeight())
@@ -188,25 +196,33 @@ private fun TransactionRow(txn: WidgetTransaction) {
 }
 
 @androidx.compose.runtime.Composable
-private fun DeltaLine(data: WidgetData) {
-    val delta = data.spentDeltaVsLastWeek
-    if (delta == null) {
-        Text("this week", style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp))
-        return
-    }
-    val spentMore = delta.cents > 0
-    val amount = Money(abs(delta.cents), delta.currency).formatted()
+private fun StreakLine(game: SavingGame?) {
     val text = when {
-        delta.cents == 0L -> "same as last week"
-        spentMore -> "up $amount vs last week"
-        else -> "down $amount vs last week"
+        game == null -> "building your streak"
+        game.currentStreakWeeks > 0 -> "🔥 ${game.currentStreakWeeks}-week saving streak"
+        game.bestStreakWeeks > 0 -> "🔥 best ${game.bestStreakWeeks} wk · start a streak"
+        else -> "🔥 build your streak"
     }
-    val color = when {
-        delta.cents == 0L -> GlanceTheme.colors.onSurfaceVariant
-        spentMore -> ColorProvider(SPENT_MORE)
-        else -> ColorProvider(SPENT_LESS)
-    }
-    Text(text, style = TextStyle(color = color, fontSize = 13.sp, fontWeight = FontWeight.Medium))
+    Text(
+        text,
+        maxLines = 1,
+        style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+    )
+}
+
+@androidx.compose.runtime.Composable
+private fun PaceLine(game: SavingGame) {
+    val over = !game.onTrack
+    val amount = Money(abs(game.thisWeekSoFar.cents - game.usualWeek.cents), game.thisWeekSoFar.currency).formatted()
+    Text(
+        if (over) "$amount over usual" else "$amount under usual",
+        maxLines = 1,
+        style = TextStyle(
+            color = if (over) ColorProvider(SPENT_MORE) else ColorProvider(SPENT_LESS),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+        ),
+    )
 }
 
 @androidx.compose.runtime.Composable
