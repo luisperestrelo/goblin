@@ -24,8 +24,8 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions ORDER BY bookingDate DESC, entryReference DESC LIMIT :limit")
     fun observeMostRecent(limit: Int): Flow<List<TransactionEntity>>
 
-    @Query("SELECT MAX(bookingDate) FROM transactions WHERE accountUid = :accountUid")
-    suspend fun newestBookingDate(accountUid: String): String?
+    @Query("SELECT MAX(bookingDate) FROM transactions WHERE accountIban = :accountIban")
+    suspend fun newestBookingDate(accountIban: String): String?
 
     @Query("SELECT COUNT(*) FROM transactions")
     fun observeCount(): Flow<Int>
@@ -40,7 +40,7 @@ interface BalanceSnapshotDao {
         """
         SELECT * FROM balance_snapshots
         WHERE id IN (
-            SELECT MAX(id) FROM balance_snapshots GROUP BY accountUid
+            SELECT MAX(id) FROM balance_snapshots GROUP BY accountIban
         )
         """
     )

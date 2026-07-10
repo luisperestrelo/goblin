@@ -43,7 +43,6 @@ import com.luisperestrelo.goblin.domain.model.Money
 @Composable
 fun DebugScreen(modifier: Modifier = Modifier, viewModel: DebugViewModel = hiltViewModel()) {
     val setupState by viewModel.setupState.collectAsState()
-    val accounts by viewModel.accounts.collectAsState()
     val balances by viewModel.latestBalances.collectAsState()
     val recentTransactions by viewModel.recentTransactions.collectAsState()
     val transactionCount by viewModel.transactionCount.collectAsState()
@@ -54,6 +53,7 @@ fun DebugScreen(modifier: Modifier = Modifier, viewModel: DebugViewModel = hiltV
     val context = LocalContext.current
     var applicationIdInput by remember { mutableStateOf("") }
     var sessionIdInput by remember { mutableStateOf("") }
+    var authCodeInput by remember { mutableStateOf("") }
 
     LaunchedEffect(authUrlToOpen) {
         authUrlToOpen?.let { url ->
@@ -127,6 +127,22 @@ fun DebugScreen(modifier: Modifier = Modifier, viewModel: DebugViewModel = hiltV
                     consentValidUntil?.let {
                         Text("Consent valid until $it", style = MaterialTheme.typography.bodySmall)
                     }
+                    OutlinedTextField(
+                        value = authCodeInput,
+                        onValueChange = { authCodeInput = it },
+                        label = { Text("Paste code (fallback)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.completeWithPastedCode(authCodeInput)
+                            authCodeInput = ""
+                        },
+                        enabled = authCodeInput.isNotBlank(),
+                    ) {
+                        Text("Submit code")
+                    }
                 }
             }
         }
@@ -157,12 +173,11 @@ fun DebugScreen(modifier: Modifier = Modifier, viewModel: DebugViewModel = hiltV
                         Text("No data yet", style = MaterialTheme.typography.bodySmall)
                     }
                     balances.forEach { snapshot ->
-                        val iban = accounts.firstOrNull { it.uid == snapshot.accountUid }?.iban ?: snapshot.accountUid
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Text("...${iban.takeLast(4)}")
+                            Text("...${snapshot.accountIban.takeLast(4)}")
                             Text(
                                 Money(snapshot.balanceCents, snapshot.currency).formatted(),
                                 fontWeight = FontWeight.Bold,
@@ -174,7 +189,7 @@ fun DebugScreen(modifier: Modifier = Modifier, viewModel: DebugViewModel = hiltV
         }
 
         item { Text("Recent transactions", style = MaterialTheme.typography.titleMedium) }
-        items(recentTransactions, key = { "${it.accountUid}/${it.entryReference}" }) { transaction ->
+        items(recentTransactions, key = { "${it.accountIban}/${it.entryReference}" }) { transaction ->
             TransactionRow(transaction)
             HorizontalDivider()
         }

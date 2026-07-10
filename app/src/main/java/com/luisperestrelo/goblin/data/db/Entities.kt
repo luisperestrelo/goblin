@@ -3,22 +3,28 @@ package com.luisperestrelo.goblin.data.db
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+/**
+ * An account keyed by its IBAN. Enable Banking issues a fresh, throwaway account
+ * `uid` on every authorization, so the uid can never be a storage key - the IBAN
+ * is the stable identity that survives re-auth.
+ */
 @Entity(tableName = "accounts")
 data class AccountEntity(
-    @PrimaryKey val uid: String,
-    val iban: String,
+    @PrimaryKey val iban: String,
     val nickname: String? = null,
     val displayOrder: Int = 0,
 )
 
 /**
- * One row per bank transaction. `entryReference` is the bank's identifier
- * (ABANCA's `transaction_id` is always null); it is unique per account, hence
- * the composite primary key, which also makes sync upserts idempotent.
+ * One row per bank transaction. `entryReference` is the bank's stable identifier
+ * (ABANCA's `transaction_id` is always null; `entry_reference` is a deterministic
+ * timestamp+amount string that is identical across authorizations), and
+ * `accountIban` is the stable account identity (never the per-session uid). The
+ * composite primary key makes sync upserts idempotent, including across re-auths.
  */
-@Entity(tableName = "transactions", primaryKeys = ["accountUid", "entryReference"])
+@Entity(tableName = "transactions", primaryKeys = ["accountIban", "entryReference"])
 data class TransactionEntity(
-    val accountUid: String,
+    val accountIban: String,
     val entryReference: String,
     val amountCents: Long,
     val currency: String,
@@ -34,7 +40,7 @@ data class TransactionEntity(
 @Entity(tableName = "balance_snapshots")
 data class BalanceSnapshotEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val accountUid: String,
+    val accountIban: String,
     val capturedAtEpochMillis: Long,
     val balanceCents: Long,
     val currency: String,

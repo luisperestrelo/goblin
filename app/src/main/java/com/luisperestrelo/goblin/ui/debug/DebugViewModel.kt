@@ -132,6 +132,16 @@ class DebugViewModel @Inject constructor(
         _authUrlToOpen.value = null
     }
 
+    /**
+     * Fallback for when the App Link redirect doesn't hand control back to the
+     * app automatically: the callback page shows the code, paste it here. State
+     * can't be checked on this path, so it's passed as null.
+     */
+    fun completeWithPastedCode(code: String) {
+        if (code.isBlank()) return
+        viewModelScope.launch { authManager.completeAuthorization(code.trim(), returnedState = null) }
+    }
+
     fun syncNow() {
         _setupState.value = _setupState.value.copy(syncing = true, statusMessage = "Syncing...")
         viewModelScope.launch {

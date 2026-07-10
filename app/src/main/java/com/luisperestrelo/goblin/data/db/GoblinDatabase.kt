@@ -11,7 +11,7 @@ import androidx.room.TypeConverters
         BalanceSnapshotEntity::class,
         SyncLogEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)

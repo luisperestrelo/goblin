@@ -21,6 +21,13 @@ data class SyncSummary(
     val fetchedTransactionCount: Int,
 )
 
+/** A session account resolved to its stable IBAN identity for this sync pass. */
+private data class ResolvedAccount(
+    val sessionUid: String,
+    val iban: String,
+    val displayOrder: Int,
+)
+
 @Singleton
 class SyncRepository @Inject constructor(
     private val api: EnableBankingApi,
@@ -37,6 +44,10 @@ class SyncRepository @Inject constructor(
      * overlap the newest known booking date by a few days so late-booked
      * transactions are never missed; upserts keep the overlap idempotent.
      *
+     * Enable Banking issues a fresh account `uid` on every authorization, so each
+     * session uid is resolved to its stable IBAN and everything is keyed by IBAN -
+     * otherwise a re-auth would duplicate the entire history under new uids.
+     *
      * [forceFullHistory] ignores local state and pulls the full backfill window
      * per account - used by the post-auth backfill, which must seed the deepest
      * history while the bank's ~1h post-SCA deep-history window is still open.
@@ -50,25 +61,24 @@ class SyncRepository @Inject constructor(
                 ?: error("No session id configured yet")
             val session = api.getSession(sessionId)
 
+            val resolvedAccounts = session.accounts.mapIndexed { index, sessionUid ->
+                val details = api.getAccountDetails(sessionUid)
+                val iban = details.accountId?.iban
+                    ?: error("Account $sessionUid has no IBAN; cannot key it stably")
+                ResolvedAccount(sessionUid = sessionUid, iban = iban, displayOrder = index)
+            }
             accountDao.upsertAll(
-                session.accounts.mapIndexed { index, accountUid ->
-                    val details = api.getAccountDetails(accountUid)
-                    AccountEntity(
-                        uid = accountUid,
-                        iban = details.accountId?.iban ?: accountUid,
-                        displayOrder = index,
-                    )
-                }
+                resolvedAccounts.map { AccountEntity(iban = it.iban, displayOrder = it.displayOrder) }
             )
 
             var fetchedTransactions = 0
-            for (accountUid in session.accounts) {
-                val balances = api.getBalances(accountUid)
+            for (account in resolvedAccounts) {
+                val balances = api.getBalances(account.sessionUid)
                 balances.balances.firstOrNull()?.let { balance ->
                     val money = Money.parse(balance.balanceAmount.amount, balance.balanceAmount.currency)
                     balanceSnapshotDao.insert(
                         BalanceSnapshotEntity(
-                            accountUid = accountUid,
+                            accountIban = account.iban,
                             capturedAtEpochMillis = System.currentTimeMillis(),
                             balanceCents = money.cents,
                             currency = money.currency,
@@ -76,19 +86,23 @@ class SyncRepository @Inject constructor(
                         )
                     )
                 }
-                fetchedTransactions += syncTransactionsForAccount(accountUid, forceFullHistory)
+                fetchedTransactions += syncTransactionsForAccount(account.sessionUid, account.iban, forceFullHistory)
             }
 
             syncLogDao.complete(logId, System.currentTimeMillis(), "success", null)
-            return SyncSummary(session.accounts.size, fetchedTransactions)
+            return SyncSummary(resolvedAccounts.size, fetchedTransactions)
         } catch (e: Exception) {
             syncLogDao.complete(logId, System.currentTimeMillis(), "failure", e.message)
             throw e
         }
     }
 
-    private suspend fun syncTransactionsForAccount(accountUid: String, forceFullHistory: Boolean): Int {
-        val newestKnown = if (forceFullHistory) null else transactionDao.newestBookingDate(accountUid)
+    private suspend fun syncTransactionsForAccount(
+        sessionUid: String,
+        accountIban: String,
+        forceFullHistory: Boolean,
+    ): Int {
+        val newestKnown = if (forceFullHistory) null else transactionDao.newestBookingDate(accountIban)
         val dateFrom = if (newestKnown != null) {
             LocalDate.parse(newestKnown).minusDays(INCREMENTAL_OVERLAP_DAYS).toString()
         } else {
@@ -98,19 +112,19 @@ class SyncRepository @Inject constructor(
         var fetched = 0
         var continuationKey: String? = null
         do {
-            val page = api.getTransactions(accountUid, dateFrom, continuationKey)
-            transactionDao.upsertAll(page.transactions.map { it.toEntity(accountUid) })
+            val page = api.getTransactions(sessionUid, dateFrom, continuationKey)
+            transactionDao.upsertAll(page.transactions.map { it.toEntity(accountIban) })
             fetched += page.transactions.size
             continuationKey = page.continuationKey
         } while (continuationKey != null)
         return fetched
     }
 
-    private fun TransactionDto.toEntity(accountUid: String): TransactionEntity {
+    private fun TransactionDto.toEntity(accountIban: String): TransactionEntity {
         val amount = Money.parse(transactionAmount.amount, transactionAmount.currency)
         val balanceAfter = balanceAfterTransaction?.let { Money.parse(it.amount, it.currency) }
         return TransactionEntity(
-            accountUid = accountUid,
+            accountIban = accountIban,
             entryReference = entryReference,
             amountCents = amount.cents,
             currency = amount.currency,
